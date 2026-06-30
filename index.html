@@ -273,6 +273,7 @@ main{max-width:1180px;margin:0 auto;padding:26px 22px 80px;width:100%;flex:1}
 /* =================== FIREBASE =================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCydTqTWGnEUuR7xZvBmo8YD1lONknJj4I",
@@ -283,16 +284,26 @@ const firebaseConfig = {
   appId: "1:1040989840454:web:000d7c93efabfc121b9647"
 };
 let fbReady = false;
-let db = null;
+let db = null, auth = null;
+let authReady = false;
 try{
   const fbApp = initializeApp(firebaseConfig);
   db = getFirestore(fbApp);
+  auth = getAuth(fbApp);
   fbReady = true;
 }catch(e){ console.error("Firebase init failed", e); }
+
+async function ensureAuth(){
+  if(!fbReady) return false;
+  if(authReady) return true;
+  try{ await signInAnonymously(auth); authReady=true; return true; }
+  catch(e){ console.error("Firebase auth failed", e); return false; }
+}
 
 /* =================== KONFIGURACE =================== */
 const PIN = "1234";
 document.getElementById('hintPin').textContent = PIN;
+
 
 const DEFAULT_DEPARTMENTS = [
   {id:"marketing", name:"Marketing", hex:"#DB2777"},
@@ -346,6 +357,7 @@ async function save(key,val){
 function setCloudNote(){const n=document.getElementById('cloudNote');
   n.innerHTML=fbReady?'<span class="d"></span>Sdíleno přes Firebase':'<span class="d off"></span>Firebase nedostupné — lokální náhled';}
 async function refreshFromCloud(){
+  await ensureAuth();
   state.contacts=await load("contacts",state.contacts);
   state.usecases=await load("usecases",state.usecases);
   state.departments=await load("departments",state.departments);
@@ -376,6 +388,8 @@ window.addEventListener('keydown',e=>{if(document.getElementById('login').classL
 async function enterApp(){
   document.getElementById('login').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  const ok=await ensureAuth();
+  if(!ok && fbReady){ toast("Nepodařilo se připojit ke sdílené databázi, zobrazují se jen lokální data"); }
   setCloudNote();
   state.contacts=await load("contacts",[]);
   state.usecases=await load("usecases",[]);
