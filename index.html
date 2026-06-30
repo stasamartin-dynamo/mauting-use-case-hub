@@ -256,7 +256,6 @@ main{max-width:1180px;margin:0 auto;padding:26px 22px 80px;width:100%;flex:1}
       </nav>
       <div class="spacer"></div>
       <span class="cloud-note" id="cloudNote"><span class="d"></span>Sdílená data</span>
-      <button class="btn-logout" id="refresh" title="Načíst nejnovější data od ostatních">⟳ Obnovit</button>
       <button class="btn-logout" id="logout">Odhlásit</button>
     </div>
   </header>
@@ -356,15 +355,6 @@ async function save(key,val){
 }
 function setCloudNote(){const n=document.getElementById('cloudNote');
   n.innerHTML=fbReady?'<span class="d"></span>Sdíleno přes Firebase':'<span class="d off"></span>Firebase nedostupné — lokální náhled';}
-async function refreshFromCloud(){
-  await ensureAuth();
-  state.contacts=await load("contacts",state.contacts);
-  state.usecases=await load("usecases",state.usecases);
-  state.departments=await load("departments",state.departments);
-  editingUC=null; editingContact=null;
-  renderAll();
-  toast("Data obnovena");
-}
 
 /* =================== POMOCNÉ =================== */
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -395,10 +385,13 @@ async function enterApp(){
   state.usecases=await load("usecases",[]);
   state.departments=await load("departments",[]);
   if(!state.departments.length){state.departments=DEFAULT_DEPARTMENTS.slice();save("departments",state.departments);}
-  if(state.usecases.length===0 && state.contacts.length===0) seedDemo();
+  const meta=await load("meta",null);
+  if(!meta||!meta.seeded){
+    seedDemo();
+    save("meta",{seeded:true});
+  }
   renderAll();
 }
-document.getElementById('refresh').addEventListener('click',()=>{refreshFromCloud();});
 document.getElementById('logout').addEventListener('click',()=>{pinBuffer="";renderDots();
   document.getElementById('app').classList.add('hidden');document.getElementById('login').classList.remove('hidden');});
 
