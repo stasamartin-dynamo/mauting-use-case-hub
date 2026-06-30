@@ -256,6 +256,7 @@ main{max-width:1180px;margin:0 auto;padding:26px 22px 80px;width:100%;flex:1}
       </nav>
       <div class="spacer"></div>
       <span class="cloud-note" id="cloudNote"><span class="d"></span>Sdílená data</span>
+      <button class="btn-logout" id="refresh" title="Načíst nejnovější data od ostatních">⟳ Obnovit</button>
       <button class="btn-logout" id="logout">Odhlásit</button>
     </div>
   </header>
@@ -268,7 +269,27 @@ main{max-width:1180px;margin:0 auto;padding:26px 22px 80px;width:100%;flex:1}
 
 <div id="toast"></div>
 
-<script>
+<script type="module">
+/* =================== FIREBASE =================== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCydTqTWGnEUuR7xZvBmo8YD1lONknJj4I",
+  authDomain: "mauting-use-case-hub.firebaseapp.com",
+  projectId: "mauting-use-case-hub",
+  storageBucket: "mauting-use-case-hub.firebasestorage.app",
+  messagingSenderId: "1040989840454",
+  appId: "1:1040989840454:web:000d7c93efabfc121b9647"
+};
+let fbReady = false;
+let db = null;
+try{
+  const fbApp = initializeApp(firebaseConfig);
+  db = getFirestore(fbApp);
+  fbReady = true;
+}catch(e){ console.error("Firebase init failed", e); }
+
 /* =================== KONFIGURACE =================== */
 const PIN = "1234";
 document.getElementById('hintPin').textContent = PIN;
@@ -307,13 +328,31 @@ let editingUC=null, editingContact=null;
 let filterDep="all", filterStatus="all";
 
 const memFallback={};
-const hasStore=(typeof window!=="undefined" && window.storage);
-async function load(key,fb){ if(!hasStore) return (key in memFallback)?memFallback[key]:fb;
-  try{const r=await window.storage.get(key,true);return r&&r.value?JSON.parse(r.value):fb;}catch(e){return fb;} }
-async function save(key,val){ memFallback[key]=val; if(!hasStore) return;
-  try{await window.storage.set(key,JSON.stringify(val),true);}catch(e){console.error(e);toast("Data se nepodařilo uložit");} }
+const COLLECTION="mauting-use-case-hub";
+async function load(key,fb){
+  if(!fbReady) return (key in memFallback)?memFallback[key]:fb;
+  try{
+    const snap=await getDoc(doc(db,COLLECTION,key));
+    if(snap.exists()){ const data=snap.data(); memFallback[key]=data.value??fb; return data.value??fb; }
+    return fb;
+  }catch(e){ console.error("Firestore load error",e); toast("Nepodařilo se načíst sdílená data, zobrazuji lokální záznam"); return (key in memFallback)?memFallback[key]:fb; }
+}
+async function save(key,val){
+  memFallback[key]=val;
+  if(!fbReady) return;
+  try{ await setDoc(doc(db,COLLECTION,key),{value:val,updatedAt:Date.now()}); }
+  catch(e){ console.error("Firestore save error",e); toast("Data se nepodařilo uložit do Firebase"); }
+}
 function setCloudNote(){const n=document.getElementById('cloudNote');
-  n.innerHTML=hasStore?'<span class="d"></span>Sdílená data':'<span class="d off"></span>Lokální náhled';}
+  n.innerHTML=fbReady?'<span class="d"></span>Sdíleno přes Firebase':'<span class="d off"></span>Firebase nedostupné — lokální náhled';}
+async function refreshFromCloud(){
+  state.contacts=await load("contacts",state.contacts);
+  state.usecases=await load("usecases",state.usecases);
+  state.departments=await load("departments",state.departments);
+  editingUC=null; editingContact=null;
+  renderAll();
+  toast("Data obnovena");
+}
 
 /* =================== POMOCNÉ =================== */
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -345,6 +384,7 @@ async function enterApp(){
   if(state.usecases.length===0 && state.contacts.length===0) seedDemo();
   renderAll();
 }
+document.getElementById('refresh').addEventListener('click',()=>{refreshFromCloud();});
 document.getElementById('logout').addEventListener('click',()=>{pinBuffer="";renderDots();
   document.getElementById('app').classList.add('hidden');document.getElementById('login').classList.remove('hidden');});
 
